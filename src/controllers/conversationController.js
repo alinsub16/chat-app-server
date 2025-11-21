@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
+import Chat from "../models/chatModel.js";
 /**
  * Create or get a 1-on-1 conversation
  * POST /api/conversations
@@ -48,16 +49,36 @@ export const createOrGetConversation = async (req, res) => {
  */
 export const getUserConversations = async (req, res) => {
   try {
-    const userId = req.user._id;
-    if (!req.user || !userId ) {
+    const userId = req.user?._id;
+    if (!userId) {
       return res.status(401).json({ message: "Unauthorized: User not found" });
     }
+
+    // Fetch 1: Individual Conversations
     const conversations = await Conversation.find({ participants: userId })
       .populate("participants", "firstName lastName email")
+      .populate({
+        path: "latestMessage",
+        populate: { path: "sender", select: "firstName lastName email" },
+      })
       .sort({ updatedAt: -1 })
       .lean();
 
-    res.json(conversations);
+    // Fetch 2: Group Chats
+    let chats = await Chat.find({ users: userId })
+      .populate("users", "firstName lastName email")
+      .populate("groupAdmin", "firstName lastName email")
+      .populate({
+        path: "latestMessage",
+        populate: { path: "sender", select: "firstName lastName email" },
+      })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.json({
+      conversations: conversations,
+      groupChats: chats,
+    });
   } catch (err) {
     console.error("Error fetching conversations:", err);
     res.status(500).json({ message: "Failed to fetch conversations" });
