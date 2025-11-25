@@ -1,18 +1,17 @@
-Chat API
+# Chat API
 
-A real-time chat and messaging application built with Node.js, Express, MongoDB, and Socket.IO.
-It supports user authentication, group chats, private conversations, file uploads, and real-time updates.
+A real-time chat and messaging application built with Node.js, Express, MongoDB, and Socket.IO. It supports user authentication, group chats, private conversations, file uploads, and real-time updates.
 
-Features
+## Features
 
-🧑‍💻 User Authentication – Register, login, update profile, change password/email.
-💬 Real-Time Messaging – Instant chat updates with Socket.IO.
-👥 Group Chats & Private Conversations – Organize messages by chat or individual conversations.
-📂 File Uploads – Supports images, videos, and PDFs with multer.
-✏️ Edit & Delete Messages – Real-time updates when messages are updated or removed.
-🔐 JWT Authentication – Secure routes and requests.
+🧑‍💻 **User Authentication** – Register, login, update profile, change password/email.
+💬 **Real-Time Messaging** – Instant chat updates with Socket.IO.
+👥 **Group Chats & Private Conversations** – Organize messages by chat or individual conversations.
+📂 **File Uploads** – Supports images, videos, and PDFs with multer.
+✏️ **Edit & Delete Messages** – Real-time updates when messages are updated or removed.
+🔐 **JWT Authentication** – Secure routes and requests.
 
-Tech Stack
+## Tech Stack
 
 | Technology     | Usage                        |
 | -------------- | ---------------------------- |
@@ -24,9 +23,9 @@ Tech Stack
 | **Multer**     | File uploads                 |
 | **JWT**        | Authentication middleware    |
 
+## Project Structure
 
-Project Structure
-
+```
 src/
 │
 ├── config/                  # Configuration files
@@ -70,10 +69,12 @@ src/
 ├── app.js                      # Express app setup
 ├── server.js                   # Server and Socket.IO initialization
 └── README.md
+```
 
-API Endpoints
+## API Endpoints
 
-Auth Routes (User Management)
+### Auth Routes (User Management)
+
 | Action              | Method | Endpoint                        | Body Example                                                                                                            |
 | ------------------- | ------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | **Register User**   | POST   | `/api/auth/register`            | `{ "firstName": "John", "lastName": "Doe", "email": "john@example.com", "number": "1234567890", "password": "123456" }` |
@@ -84,15 +85,16 @@ Auth Routes (User Management)
 | **Change Email**    | PUT    | `/api/auth/me`                  | `{ "currentPassword": "oldpass", "email": "newemail@example.com" }`                                                     |
 | **Search User**     | GET    | `/api/search/users?query=chris` | Headers: `Authorization: Bearer <token>`                                                                                |
 
-Chat Routes (Group Chat Management)
+### Chat Routes (Group Chat Management)
+
 | Action           | Method | Endpoint                        | Body Example                                                        |
 | ---------------- | ------ | ------------------------------- | ------------------------------------------------------------------- |
 | **Create Chat**  | POST   | `/api/chats`                    | `{ "chatName": "My Group", "members": ["<userId1>", "<userId2>"] }` |
 | **Get My Chats** | GET    | `/api/chats`                    | Headers: `Authorization: Bearer <token>`                            |
-| **Add Member**   | PUT    | `/api/chats/:chatId/add-member` | `{ "userId": "_id" }`                          |
+| **Add Member**   | PUT    | `/api/chats/:chatId/add-member` | `{ "userId": "_id" }`                                               |
 
+### Message Routes (Chat Messages)
 
-Message Routes (Chat Messages)
 | Action                | Method | Endpoint                   | Body Example                                                                                                                     |
 | --------------------- | ------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | **Send Message**      | POST   | `/api/messages/`           | `form-data`:<br> - `chatId`: `<chatId>`<br> - `content`: `"Hello!"`<br> - `messageType`: `"text"`<br> - `files`: `[file upload]` |
@@ -100,19 +102,20 @@ Message Routes (Chat Messages)
 | **Update Message**    | PUT    | `/api/messages/:messageId` | `{ "content": "Hello, how are you?" }`                                                                                           |
 | **Delete Message**    | DELETE | `/api/messages/:messageId` | Headers: `Authorization: Bearer <token>`                                                                                         |
 
+### Conversation Routes (Private Chat)
 
-Conversation Routes (Private Chat)
 | Action                 | Method | Endpoint              | Body Example                             |
 | ---------------------- | ------ | --------------------- | ---------------------------------------- |
 | **Start Conversation** | POST   | `/api/conversations/` | `{ "receiverId": "<userId>" }`           |
 | **Get Conversations**  | GET    | `/api/conversations/` | Headers: `Authorization: Bearer <token>` |
 
-Test Route
+### Test Route
+
 | Action       | Method | Endpoint    |
 | ------------ | ------ | ----------- |
 | **Test API** | GET    | `/api/test` |
 
-Socket.IO Events
+## Socket.IO Events
 
 | Event            | Direction       | Description                          |
 | ---------------- | --------------- | ------------------------------------ |
@@ -121,6 +124,7 @@ Socket.IO Events
 | `messageUpdated` | Server → Client | Broadcast when a message is updated. |
 | `messageDeleted` | Server → Client | Broadcast when a message is deleted. |
 
+```js
 // Connect to socket
 const socket = io("http://localhost:5000");
 
@@ -139,7 +143,8 @@ socket.on("messageUpdated", (msg) => {
 socket.on("messageDeleted", (msg) => {
   console.log("Message deleted:", msg.messageId);
 });
+```
 
+## Contributors
 
-Contributors
-Christopher Alinsub – Backend Developer
+**Christopher Alinsub** – Backend Developer
