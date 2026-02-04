@@ -3,7 +3,7 @@ import User from "../models/User.js";
 //  Search for users by name or email
 export const searchUsers = async (req, res) => {
   try {
-    const { query } = req.query; // e.g., /api/users/search?query=chris
+    const { query } = req.query; // e.g., /api/search/users?query=chris
 
     if (!query) {
       return res.status(400).json({ message: "Please provide a search query" });
@@ -16,7 +16,8 @@ export const searchUsers = async (req, res) => {
         { lastName: { $regex: query, $options: "i" } },
         { email: { $regex: query, $options: "i" } },
       ],
-    }).select("-password"); // exclude password
+    }).select("firstName lastName middleName email profilePicture"); 
+    // Only include essential fields
 
     res.json(users);
   } catch (error) {
