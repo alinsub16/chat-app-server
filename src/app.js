@@ -2,7 +2,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import authRoutes from "./routes/authRoutes.js"; //  Import authentication routes
+import authRoutes from "./routes/authRoutes.js"; 
 import chatRoutes from "./routes/chatRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
@@ -17,7 +17,7 @@ const app = express();
 // Middleware
 app.use(express.json()); // Parse JSON request bodies
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173", //  Allow your frontend
+  origin: process.env.FRONTEND_URL || "http://localhost:5174", //  Allow your frontend
   methods: ["GET", "POST", "PUT", "DELETE"],        
   credentials: true, //  Allow cookies and headers like Authorization
 }));
