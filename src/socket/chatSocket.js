@@ -1,11 +1,10 @@
-// src/socket/chatSocket.js
 import mongoose from "mongoose";
 import { socketAuth } from "../middleware/socketAuthMiddleware.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import Chat from "../models/chatModel.js";
 
-const onlineUsers = new Map(); // userId -> [socketIds]
+const onlineUsers = new Map(); 
 export { onlineUsers };
 
 export default function chatSocket(io) {
@@ -34,23 +33,56 @@ export default function chatSocket(io) {
     });
 
     // --- JOIN / LEAVE CHAT ROOMS ---
-    socket.on("joinChat", async (chatId) => {
+    socket.on("joinChat", async (roomId) => {
       try {
-        if (!chatId) return socket.emit("errorMessage", { error: "Chat ID is required to join." });
+        if (!roomId)
+          return socket.emit("errorMessage", { error: "Room ID required" });
 
-        const groupChat = await Chat.findById(chatId).populate("users", "_id");
-        if (!groupChat) return socket.emit("errorMessage", { error: "Group chat not found" });
+        // First check Conversation (1-1 chat)
+        let conversation = await Conversation.findById(roomId);
 
-        const userIds = groupChat.users.map(u => u._id.toString());
-        if (!userIds.includes(userId.toString())) {
-          return socket.emit("errorMessage", { error: "Unauthorized to join this chat" });
+        if (conversation) {
+          const participantIds = conversation.participants.map(p =>
+            p.toString()
+          );
+
+          if (!participantIds.includes(userId.toString())) {
+            return socket.emit("errorMessage", {
+              error: "Unauthorized to join this conversation",
+            });
+          }
+
+          socket.join(roomId);
+          console.log(`User ${userId} joined conversation room: ${roomId}`);
+          return;
+        }
+        console.log(
+          "Room members:",
+          io.sockets.adapter.rooms.get(conversation)
+        );
+
+        // Then check Group Chat
+        let groupChat = await Chat.findById(roomId).populate("users", "_id");
+
+        if (groupChat) {
+          const userIds = groupChat.users.map(u => u._id.toString());
+
+          if (!userIds.includes(userId.toString())) {
+            return socket.emit("errorMessage", {
+              error: "Unauthorized to join this chat",
+            });
+          }
+
+          socket.join(roomId);
+          console.log(`User ${userId} joined group chat room: ${roomId}`);
+          return;
         }
 
-        socket.join(chatId);
-        console.log(` User ${userId} joined chat room: ${chatId}`);
+        return socket.emit("errorMessage", { error: "Room not found" });
+
       } catch (err) {
-        console.error(" Error joining chat:", err.message);
-        socket.emit("errorMessage", { error: "Failed to join chat" });
+        console.error("Error joining room:", err.message);
+        socket.emit("errorMessage", { error: "Failed to join room" });
       }
     });
 
@@ -91,9 +123,14 @@ export default function chatSocket(io) {
     });
 
     // --- TYPING EVENTS ---
-    socket.on("typing", ({ conversationId, isTyping }) => {
-      socket.to(conversationId).emit("userTyping", { userId, conversationId, isTyping });
+    socket.on("typing", ({ conversationId, userId, isTyping }) => {
+      socket.to(conversationId).emit("userTyping", {
+        conversationId,
+        userId,
+        isTyping,
+      });
     });
+
 
     // --- SEND MESSAGE ---
     socket.on("sendMessage", async (data) => {

@@ -92,7 +92,7 @@ export const sendMessage = async (req, res) => {
     }
 
     // Create message
-    const newMessage = await Message.create({
+    let newMessage = await Message.create({
       sender: senderId,
       conversationId: conversationId || null,
       chatId: chatId || null,
@@ -100,6 +100,7 @@ export const sendMessage = async (req, res) => {
       messageType,
       attachments,
     });
+    newMessage = await newMessage.populate("sender", "_id firstName lastName email");
 
     // If it's a group chat, update last message
     if (chat) {
@@ -139,11 +140,12 @@ export const sendMessage = async (req, res) => {
     //  Emit socket events
     const io = getIO(req);
     if (io) {
-      // Emit to room (group chat or private chat)
       const room = chatId || conversationId;
+
+      // Emit the new message to the chat room
       io.to(room.toString()).emit("newMessage", newMessage);
 
-      // Emit update for conversation list
+      // Update conversation list for everyone
       io.emit("conversationUpdated", {
         room,
         lastMessage: newMessage.content,

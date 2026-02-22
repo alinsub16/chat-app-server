@@ -17,7 +17,7 @@ const app = express();
 // Middleware
 app.use(express.json()); // Parse JSON request bodies
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5174", //  Allow your frontend
+  origin: process.env.FRONTEND_URL || "http://localhost:5173", //  Allow your frontend
   methods: ["GET", "POST", "PUT", "DELETE"],        
   credentials: true, //  Allow cookies and headers like Authorization
 }));
