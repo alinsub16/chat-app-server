@@ -4,205 +4,241 @@ import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import Chat from "../models/chatModel.js";
 
-const onlineUsers = new Map(); 
+const onlineUsers = new Map();
 export { onlineUsers };
 
 export default function chatSocket(io) {
-
+  // ===============================
+  // AUTH MIDDLEWARE
+  // ===============================
   io.use((socket, next) => {
     socketAuth(socket, (err) => {
-      if (err || !socket.user) return next(new Error("Authentication error"));
+      if (err || !socket.user) {
+        return next(new Error("Authentication error"));
+      }
       next();
     });
   });
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     const userId = socket.user?.id;
-    console.log(`⚡ User connected: ${socket.id} (User ID: ${userId || 'Unknown'})`);
+    console.log(`⚡ User connected: ${socket.id} (User ID: ${userId})`);
 
-    if (userId) {
-      if (!onlineUsers.has(userId)) onlineUsers.set(userId, []);
-      onlineUsers.get(userId).push(socket.id);
+    if (!userId) return;
 
-      io.emit("userOnline", { userId });
-      socket.emit("onlineUsers", Array.from(onlineUsers.keys()));
+    // ===============================
+    // TRACK ONLINE USERS
+    // ===============================
+    if (!onlineUsers.has(userId)) onlineUsers.set(userId, []);
+    onlineUsers.get(userId).push(socket.id);
+
+    io.emit("userOnline", { userId });
+    socket.emit("onlineUsers", Array.from(onlineUsers.keys()));
+
+    // ===============================
+    // AUTO JOIN USER ROOMS
+    // ===============================
+    try {
+      const conversations = await Conversation.find({
+        participants: userId,
+      }).select("_id");
+
+      conversations.forEach((conv) =>
+        socket.join(conv._id.toString())
+      );
+
+      const groupChats = await Chat.find({
+        users: userId,
+      }).select("_id");
+
+      groupChats.forEach((chat) =>
+        socket.join(chat._id.toString())
+      );
+
+      console.log(
+        `✅ User ${userId} auto-joined ${
+          conversations.length + groupChats.length
+        } rooms`
+      );
+    } catch (err) {
+      console.error("Auto-join error:", err.message);
     }
 
-    socket.on("getOnlineUsers", () => {
-      socket.emit("onlineUsers", Array.from(onlineUsers.keys()));
+    // ===============================
+    // JOIN / LEAVE CHAT
+    // ===============================
+    socket.on("joinChat", (roomId) => {
+      if (!roomId) return;
+      socket.join(roomId);
+      console.log(`User ${userId} joined room: ${roomId}`);
     });
 
-    // --- JOIN / LEAVE CHAT ROOMS ---
-    socket.on("joinChat", async (roomId) => {
-      try {
-        if (!roomId)
-          return socket.emit("errorMessage", { error: "Room ID required" });
-
-        // First check Conversation (1-1 chat)
-        let conversation = await Conversation.findById(roomId);
-
-        if (conversation) {
-          const participantIds = conversation.participants.map(p =>
-            p.toString()
-          );
-
-          if (!participantIds.includes(userId.toString())) {
-            return socket.emit("errorMessage", {
-              error: "Unauthorized to join this conversation",
-            });
-          }
-
-          socket.join(roomId);
-          console.log(`User ${userId} joined conversation room: ${roomId}`);
-          return;
-        }
-        console.log(
-          "Room members:",
-          io.sockets.adapter.rooms.get(conversation)
-        );
-
-        // Then check Group Chat
-        let groupChat = await Chat.findById(roomId).populate("users", "_id");
-
-        if (groupChat) {
-          const userIds = groupChat.users.map(u => u._id.toString());
-
-          if (!userIds.includes(userId.toString())) {
-            return socket.emit("errorMessage", {
-              error: "Unauthorized to join this chat",
-            });
-          }
-
-          socket.join(roomId);
-          console.log(`User ${userId} joined group chat room: ${roomId}`);
-          return;
-        }
-
-        return socket.emit("errorMessage", { error: "Room not found" });
-
-      } catch (err) {
-        console.error("Error joining room:", err.message);
-        socket.emit("errorMessage", { error: "Failed to join room" });
-      }
+    socket.on("leaveChat", (roomId) => {
+      if (!roomId) return;
+      socket.leave(roomId);
+      console.log(`🚪 User ${userId} left room: ${roomId}`);
     });
 
-    socket.on("leaveChat", (chatId) => {
-      if (!chatId) return socket.emit("errorMessage", { error: "Chat ID is required to leave." });
-      socket.leave(chatId);
-      console.log(`🚪 User ${userId} left chat room: ${chatId}`);
-    });
+    // ===============================
+    // TYPING EVENTS
+    // ===============================
+    socket.on("typing", ({ roomId, isTyping }) => {
+      if (!roomId) return;
 
-    // --- CREATE / DELETE CONVERSATIONS ---
-    socket.on("conversation:create", async (newConv) => {
-      try {
-        const participantIds = newConv.participants || [];
-        participantIds.forEach(id => {
-          if (onlineUsers.has(id)) {
-            onlineUsers.get(id).forEach(sockId => {
-              io.to(sockId).emit("conversation:created", newConv);
-            });
-          }
-        });
-      } catch (err) {
-        console.error("Error broadcasting conversation:create:", err.message);
-      }
-    });
-
-    socket.on("conversation:delete", async ({ convId, participantIds }) => {
-      try {
-        participantIds.forEach(id => {
-          if (onlineUsers.has(id)) {
-            onlineUsers.get(id).forEach(sockId => {
-              io.to(sockId).emit("conversation:deleted", convId);
-            });
-          }
-        });
-      } catch (err) {
-        console.error("Error broadcasting conversation:deleted:", err.message);
-      }
-    });
-
-    // --- TYPING EVENTS ---
-    socket.on("typing", ({ conversationId, userId, isTyping }) => {
-      socket.to(conversationId).emit("userTyping", {
-        conversationId,
+      // Emit to all other users in the room
+      socket.to(roomId).emit("typing", {
+        conversationId: roomId, // ⚠ must match frontend key
         userId,
         isTyping,
       });
     });
-
-
-    // --- SEND MESSAGE ---
+    // ===============================
+    // SEND MESSAGE (SOCKET OWNS SAVE)
+    // ===============================
     socket.on("sendMessage", async (data) => {
-      const session = await mongoose.startSession();
-      session.startTransaction();
       try {
-        const { chatId, conversationId, message, attachments = [] } = data;
-        if (!userId) return socket.emit("errorMessage", { error: "User not authenticated" });
-        if (conversationId && chatId) return socket.emit("errorMessage", { error: "Provide either conversationId or chatId, not both" });
-        if ((!conversationId && !chatId) || (!message && attachments.length === 0)) {
-          return socket.emit("errorMessage", { error: "Invalid message data" });
+        const {
+          content,
+          attachments = [],
+          conversationId,
+          chatId,
+          messageType = "text",
+          clientTempId,
+        } = data;
+
+        const roomId = conversationId || chatId;
+
+        if (!roomId) {
+          return socket.emit("errorMessage", {
+            error: "Room ID required",
+          });
         }
 
-        let roomId = "";
-        let participants = [];
-
-        if (conversationId) {
-          const conversation = await Conversation.findById(conversationId);
-          if (!conversation) return socket.emit("errorMessage", { error: "Conversation not found" });
-          const participantIds = conversation.participants.map(p => p.toString());
-          if (!participantIds.includes(userId.toString())) return socket.emit("errorMessage", { error: "User not part of this conversation" });
-          roomId = conversationId;
-          participants = participantIds;
-        } else if (chatId) {
-          const groupChat = await Chat.findById(chatId).populate("users", "_id");
-          if (!groupChat) return socket.emit("errorMessage", { error: "Group chat not found" });
-          const userIds = groupChat.users.map(u => u._id.toString());
-          if (!userIds.includes(userId.toString())) return socket.emit("errorMessage", { error: "User not part of this group chat" });
-          roomId = chatId;
-          participants = userIds;
+        if (!content?.trim() && attachments.length === 0) {
+          return socket.emit("errorMessage", {
+            error: "Message content or attachment required",
+          });
         }
 
-        const [newMessage] = await Message.create([{
+        // 🔥 Create message in DB
+        let newMessage = await Message.create({
           sender: userId,
           conversationId: conversationId || null,
-          chat: chatId || null,
-          content: message || "",
-          messageType: attachments.length > 0 ? "file" : "text",
+          chatId: chatId || null,
+          content: content || "",
+          messageType,
           attachments,
-        }], { session });
+        });
 
-        if (conversationId) await Conversation.findByIdAndUpdate(conversationId, { lastMessage: newMessage.content }, { session });
-        else if (chatId) await Chat.findByIdAndUpdate(chatId, { latestMessage: newMessage._id }, { session });
+        await newMessage.populate(
+          "sender",
+          "_id firstName lastName email"
+        );
 
-        await session.commitTransaction();
+        // 🔥 Emit to all users in room (including sender)
+        io.to(roomId).emit("receiveMessage", {
+          ...newMessage.toObject(),
+          clientTempId, // used to replace optimistic message
+        });
 
-        const populatedMessage = await Message.findById(newMessage._id)
-          .populate("sender", "firstName lastName email")
-          .populate("conversationId", "participants")
-          .populate("chat", "users chatName isGroupChat");
-
-        socket.to(roomId).emit("receiveMessage", populatedMessage);
-        socket.emit("messageSent", populatedMessage);
+        console.log(`💬 Message saved & emitted to room ${roomId}`);
       } catch (err) {
-        await session.abortTransaction();
-        console.error("Error sending message:", err.message);
-        socket.emit("errorMessage", { error: "Failed to send message" });
-      } finally {
-        session.endSession();
+        console.error("Socket sendMessage error:", err.message);
+        socket.emit("errorMessage", {
+          error: "Failed to send message",
+        });
       }
     });
 
-    // --- DISCONNECT ---
+    // ===============================
+    // UPDATE MESSAGE
+    // ===============================
+    socket.on("updateMessage", async ({ messageId, content }) => {
+      try {
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+          return socket.emit("errorMessage", {
+            error: "Invalid message ID",
+          });
+        }
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+          return socket.emit("errorMessage", {
+            error: "Message not found",
+          });
+        }
+
+        // Only sender can update
+        if (message.sender.toString() !== userId.toString()) {
+          return socket.emit("errorMessage", {
+            error: "Unauthorized",
+          });
+        }
+
+        message.content = content;
+        await message.save();
+
+        const roomId =
+          message.chatId?.toString() ||
+          message.conversationId?.toString();
+
+        io.to(roomId).emit("messageUpdated", message);
+
+        console.log(`✏️ Message ${messageId} updated`);
+      } catch (err) {
+        console.error("Socket updateMessage error:", err.message);
+      }
+    });
+
+    // ===============================
+    // DELETE MESSAGE
+    // ===============================
+    socket.on("deleteMessage", async ({ messageId, roomId: clientRoomId }) => {
+      try {
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+          return socket.emit("errorMessage", { error: "Invalid message ID" });
+        }
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+          return socket.emit("errorMessage", { error: "Message not found" });
+        }
+
+        // Only sender can delete
+        if (message.sender.toString() !== userId.toString()) {
+          return socket.emit("errorMessage", { error: "Unauthorized" });
+        }
+
+        // Prefer client-provided roomId
+        const roomId = clientRoomId || message.chatId?.toString() || message.conversationId?.toString();
+        if (!roomId) {
+          return socket.emit("errorMessage", { error: "Room ID required" });
+        }
+
+        await Message.findByIdAndDelete(messageId);
+
+        io.to(roomId).emit("messageDeleted", { messageId });
+
+        console.log(`🗑 Message ${messageId} deleted`);
+      } catch (err) {
+        console.error("Socket deleteMessage error:", err.message);
+      }
+    });
+
+    // ===============================
+    // DISCONNECT
+    // ===============================
     socket.on("disconnect", () => {
       console.log(`Client disconnected: ${socket.id}`);
-      if (!userId) return;
 
       const userSockets = onlineUsers.get(userId) || [];
-      const updatedSockets = userSockets.filter(id => id !== socket.id);
+      const updatedSockets = userSockets.filter(
+        (id) => id !== socket.id
+      );
 
-      if (updatedSockets.length > 0) onlineUsers.set(userId, updatedSockets);
-      else {
+      if (updatedSockets.length > 0) {
+        onlineUsers.set(userId, updatedSockets);
+      } else {
         setTimeout(() => {
           const currentSockets = onlineUsers.get(userId);
           if (!currentSockets || currentSockets.length === 0) {
