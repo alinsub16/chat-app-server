@@ -1,10 +1,19 @@
-// src/routes/uploadRoutes.js
 import express from "express";
-import upload from "../middleware/upload.js";
-import { uploadFile } from "../controllers/uploadController.js";
+import {uploadChatAttachments} from "../controllers/uploadController.js";
+import { uploadGeneral } from "../middleware/uploadMiddleware.js";
+import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.post("/upload", upload.single("file"), uploadFile);
+// -----------------------------
+// Upload chat attachments (multiple files)
+// Requires auth
+// -----------------------------
+router.post(
+  "/attachment",
+  protect,
+  uploadGeneral.array("files", 5),
+  uploadChatAttachments
+);
 
 export default router;

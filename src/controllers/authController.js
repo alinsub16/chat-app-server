@@ -1,17 +1,17 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import generateToken from "../utils/generateToken.js";
 import cloudinary from "../config/cloudinary.js";
+import fs from "fs/promises";
 import { registerSchema, updateProfileSchema } from "../validation/authValidation.js";
 
 
+// ============================
 // REGISTER
+// ============================
 export const registerUser = async (req, res) => {
   try {
-    // =========================
-    // 1. VALIDATE INPUT
-    // =========================
+    // 1️⃣ Validate input
     const { error } = registerSchema.validate(req.body, { abortEarly: false });
     if (error) {
       return res.status(400).json({
@@ -20,13 +20,11 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    const { firstName, lastName, middleName, email, phoneNumber, password } = req.body;
+    let { firstName, lastName, middleName, email, phoneNumber, password } = req.body;
 
+    email = email.toLowerCase();
 
-
-   // =========================
-    // 2. CHECK FOR DUPLICATES
-    // =========================
+    // 2️⃣ Check duplicates
     const existingUser = await User.findOne({
       $or: [{ email }, { phoneNumber }],
     });
@@ -40,33 +38,38 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    // =========================
-    // 3. HANDLE PROFILE IMAGE
-    // =======================
+    // 3️⃣ Handle profile image
     let profilePictureUrl = null;
+    let profilePicturePublicId = null;
 
-    // If user uploaded a file, send to Cloudinary
     if (req.file) {
       try {
         const uploadResult = await cloudinary.uploader.upload(req.file.path, {
           folder: "user_profiles",
-          resource_type: "auto",
+          resource_type: "image",
         });
+
         profilePictureUrl = uploadResult.secure_url;
+        profilePicturePublicId = uploadResult.public_id;
+
+        // Delete local temp file
+        await fs.unlink(req.file.path);
       } catch (uploadError) {
-        console.error(" Cloudinary upload error:", uploadError);
+        console.error("Cloudinary upload error:", uploadError);
         return res.status(500).json({ message: "Failed to upload profile picture" });
       }
     }
-    //  Just pass the plain password, let mongoose middleware hash it
+
+    // 4️⃣ Create user
     const newUser = await User.create({
       firstName,
       lastName,
       middleName,
       email,
-      phoneNumber: phoneNumber,
+      phoneNumber,
       password,
       profilePicture: profilePictureUrl,
+      profilePicturePublicId,
     });
 
     res.status(201).json({
@@ -86,25 +89,25 @@ export const registerUser = async (req, res) => {
   }
 };
 
+
+// ============================
 // LOGIN
+// ============================
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check if user exists
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
     if (!user) {
-      return res.status(400).json({ message: "Invalid email or password" });
+      return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid email or password" });
+      return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Create JWT
-   const token = generateToken(user);
+    const token = generateToken(user);
 
     res.json({
       message: "Login successful",
@@ -123,10 +126,13 @@ export const loginUser = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-//  Update own profile 
+
+
+// ============================
+// UPDATE OWN PROFILE
+// ============================
 export const updateOwnProfile = async (req, res) => {
   try {
-    const userId = req.user._id; 
     const { error } = updateProfileSchema.validate(req.body, { abortEarly: false });
     if (error) {
       return res.status(400).json({
@@ -134,26 +140,32 @@ export const updateOwnProfile = async (req, res) => {
         errors: error.details.map((err) => err.message),
       });
     }
-    const { firstName, lastName, middleName, phoneNumber, password, currentPassword, email } = req.body;
 
-    // Find the logged-in user
-    const user = await User.findById(userId);
+    const user = req.user; // Already attached by protect middleware
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+
+    const {
+      firstName,
+      lastName,
+      middleName,
+      phoneNumber,
+      password,
+      currentPassword,
+      email,
+    } = req.body;
+
     let shouldLogout = false;
 
-    // Update basic fields
+    // Basic updates
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (middleName) user.middleName = middleName;
     if (phoneNumber) user.phoneNumber = phoneNumber;
 
-    // =========================
-    // EMAIL CHANGE LOGIC
-    // =========================
-    if (email && email !== user.email) {
-      // Require current password to change email
+    // ================= EMAIL CHANGE =================
+    if (email && email.toLowerCase() !== user.email) {
       if (!currentPassword) {
         return res.status(400).json({ message: "Current password is required to change email" });
       }
@@ -163,20 +175,17 @@ export const updateOwnProfile = async (req, res) => {
         return res.status(400).json({ message: "Current password is incorrect" });
       }
 
-      // Check if new email already exists
-      const existingUser = await User.findOne({ email });
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
       if (existingUser) {
         return res.status(400).json({ message: "Email is already taken" });
       }
 
-      user.email = email; // safe to update
-      shouldLogout = true;
+      user.email = email.toLowerCase();
       user.tokenVersion += 1;
+      shouldLogout = true;
     }
 
-    // =========================
-    // PASSWORD CHANGE LOGIC
-    // =========================
+    // ================= PASSWORD CHANGE =================
     if (password) {
       if (!currentPassword) {
         return res.status(400).json({ message: "Current password is required to set a new password" });
@@ -186,29 +195,28 @@ export const updateOwnProfile = async (req, res) => {
       if (!isMatch) {
         return res.status(400).json({ message: "Current password is incorrect" });
       }
-      
-    user.password = password;
-    shouldLogout = true;
-    user.tokenVersion += 1;
+
+      user.password = password;
+      user.tokenVersion += 1;
+      shouldLogout = true;
     }
-    // =========================
-    // PROFILE PICTURE UPDATE
-    // =========================
+
+    // ================= PROFILE IMAGE UPDATE =================
     if (req.file) {
-      // Upload new image to Cloudinary
       const uploadResult = await cloudinary.uploader.upload(req.file.path, {
         folder: "user_profiles",
         resource_type: "image",
       });
 
-      // Delete old image from Cloudinary if exists
-      if (user.profilePicture) {
-        const oldImagePublicId = user.profilePicture.split("/").slice(-1)[0].split(".")[0];
-        await cloudinary.uploader.destroy(`user_profiles/${oldImagePublicId}`);
+      // Delete old Cloudinary image safely
+      if (user.profilePicturePublicId) {
+        await cloudinary.uploader.destroy(user.profilePicturePublicId);
       }
 
-      // Save new Cloudinary URL
       user.profilePicture = uploadResult.secure_url;
+      user.profilePicturePublicId = uploadResult.public_id;
+
+      await fs.unlink(req.file.path);
     }
 
     await user.save();
@@ -231,45 +239,36 @@ export const updateOwnProfile = async (req, res) => {
     res.status(500).json({ message: "Failed to update profile" });
   }
 };
+
+
+// ============================
+// DELETE OWN PROFILE
+// ============================
 export const deleteOwnProfile = async (req, res) => {
   try {
-    const userId = req.user._id; // From JWT
+    const user = req.user;
 
-    // Find the user
-    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // =========================
-    // CLOUDINARY IMAGE CLEANUP
-    // =========================
-    if (user.profilePicture) {
+    // Delete Cloudinary image safely
+    if (user.profilePicturePublicId) {
       try {
-        // Extract public_id from Cloudinary URL
-        const parts = user.profilePicture.split("/");
-        const filename = parts[parts.length - 1]; // e.g., abc123.jpg
-        const publicId = `user_profiles/${filename.split(".")[0]}`; 
-
-        await cloudinary.uploader.destroy(publicId);
-        console.log("Cloudinary profile image deleted:", publicId);
+        await cloudinary.uploader.destroy(user.profilePicturePublicId);
       } catch (cloudError) {
         console.error("Cloudinary deletion error:", cloudError.message);
-        // Continue even if Cloudinary deletion fails
       }
     }
 
-    // =========================
-    // DELETE USER FROM DATABASE
-    // =========================
     await user.deleteOne();
 
     res.json({
       message: "Account deleted successfully",
-      deletedUserId: userId
+      deletedUserId: user._id,
     });
   } catch (error) {
-    console.error(" Error deleting profile:", error);
+    console.error("Error deleting profile:", error);
     res.status(500).json({ message: "Failed to delete account" });
   }
 };

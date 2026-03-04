@@ -9,13 +9,13 @@ const router = express.Router();
 router.post("/register", uploadImage.single("profilePicture"), registerUser);
 router.post("/login", loginUser);
 
-// GET /api/auth/profile — protected
+
 // Show profile
 router.get("/profile", protect, (req, res) => {
   res.json({ message: "User profile data", user: req.user });
 });
 
-// PUT /api/users/me
+
 // Update profile
 router.put("/me", protect, uploadImage.single("profilePicture"), updateOwnProfile);
 

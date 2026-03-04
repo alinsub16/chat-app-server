@@ -158,7 +158,7 @@ export default function chatSocket(io) {
         if (!mongoose.Types.ObjectId.isValid(messageId)) {
           return socket.emit("errorMessage", {
             error: "Invalid message ID",
-          });
+          }); 
         }
 
         const message = await Message.findById(messageId);
@@ -182,7 +182,10 @@ export default function chatSocket(io) {
           message.chatId?.toString() ||
           message.conversationId?.toString();
 
-        io.to(roomId).emit("messageUpdated", message);
+        const populatedMessage = await Message.findById(message._id)
+        .populate("sender", "firstName lastName profilePicture");
+
+        io.to(roomId).emit("messageUpdated", populatedMessage);
 
         console.log(`✏️ Message ${messageId} updated`);
       } catch (err) {
@@ -207,7 +210,7 @@ export default function chatSocket(io) {
         // Only sender can delete
         if (message.sender.toString() !== userId.toString()) {
           return socket.emit("errorMessage", { error: "Unauthorized" });
-        }
+        } 
 
         // Prefer client-provided roomId
         const roomId = clientRoomId || message.chatId?.toString() || message.conversationId?.toString();
