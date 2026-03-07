@@ -21,7 +21,7 @@ const messageSchema = new mongoose.Schema(
     content: {
       type: String,
       trim: true,
-      required: [true, "Message content is required"],
+      
     },
     messageType: {
       type: String,
