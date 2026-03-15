@@ -229,6 +229,54 @@ export default function chatSocket(io) {
     });
 
     // ===============================
+    // React to Message
+    // ===============================
+    socket.on("reactMessage", async ({ messageId, emoji }) => {
+      try {
+
+        const message = await Message.findById(messageId);
+
+        if (!message) return;
+
+        const existing = message.reactions.find(
+          (r) =>
+            r.user.toString() === userId &&
+            r.emoji === emoji
+        );
+
+        if (existing) {
+          // remove reaction (toggle)
+          message.reactions = message.reactions.filter(
+            (r) =>
+              !(
+                r.user.toString() === userId &&
+                r.emoji === emoji
+              )
+          );
+        } else {
+          message.reactions.push({
+            user: userId,
+            emoji
+          });
+        }
+
+        await message.save();
+
+        const roomId =
+          message.chatId?.toString() ||
+          message.conversationId?.toString();
+
+        io.to(roomId).emit("messageReactionUpdated", {
+          messageId,
+          reactions: message.reactions
+        });
+
+      } catch (err) {
+        console.error("Reaction error:", err);
+      }
+    });
+
+    // ===============================
     // DISCONNECT
     // ===============================
     socket.on("disconnect", () => {
