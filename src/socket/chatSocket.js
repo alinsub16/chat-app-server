@@ -187,7 +187,7 @@ export default function chatSocket(io) {
 
         io.to(roomId).emit("messageUpdated", populatedMessage);
 
-        console.log(`✏️ Message ${messageId} updated`);
+        console.log(` Message ${messageId} updated`);
       } catch (err) {
         console.error("Socket updateMessage error:", err.message);
       }

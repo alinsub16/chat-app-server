@@ -129,19 +129,12 @@ export const loginUser = async (req, res) => {
 
 
 // ============================
-// UPDATE OWN PROFILE
+// UPDATE Basic PROFILE
 // ============================
-export const updateOwnProfile = async (req, res) => {
+export const updateBasicProfile = async (req, res) => {
   try {
-    const { error } = updateProfileSchema.validate(req.body, { abortEarly: false });
-    if (error) {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: error.details.map((err) => err.message),
-      });
-    }
+    const user = req.user;
 
-    const user = req.user; // Already attached by protect middleware
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -151,64 +144,20 @@ export const updateOwnProfile = async (req, res) => {
       lastName,
       middleName,
       phoneNumber,
-      password,
-      currentPassword,
-      email,
     } = req.body;
 
-    let shouldLogout = false;
-
-    // Basic updates
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (middleName) user.middleName = middleName;
     if (phoneNumber) user.phoneNumber = phoneNumber;
 
-    // ================= EMAIL CHANGE =================
-    if (email && email.toLowerCase() !== user.email) {
-      if (!currentPassword) {
-        return res.status(400).json({ message: "Current password is required to change email" });
-      }
-
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return res.status(400).json({ message: "Current password is incorrect" });
-      }
-
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
-        return res.status(400).json({ message: "Email is already taken" });
-      }
-
-      user.email = email.toLowerCase();
-      user.tokenVersion += 1;
-      shouldLogout = true;
-    }
-
-    // ================= PASSWORD CHANGE =================
-    if (password) {
-      if (!currentPassword) {
-        return res.status(400).json({ message: "Current password is required to set a new password" });
-      }
-
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return res.status(400).json({ message: "Current password is incorrect" });
-      }
-
-      user.password = password;
-      user.tokenVersion += 1;
-      shouldLogout = true;
-    }
-
-    // ================= PROFILE IMAGE UPDATE =================
+    // PROFILE IMAGE
     if (req.file) {
       const uploadResult = await cloudinary.uploader.upload(req.file.path, {
         folder: "user_profiles",
         resource_type: "image",
       });
 
-      // Delete old Cloudinary image safely
       if (user.profilePicturePublicId) {
         await cloudinary.uploader.destroy(user.profilePicturePublicId);
       }
@@ -223,7 +172,6 @@ export const updateOwnProfile = async (req, res) => {
 
     res.json({
       message: "Profile updated successfully",
-      logout: shouldLogout,
       user: {
         _id: user._id,
         firstName: user.firstName,
@@ -235,12 +183,98 @@ export const updateOwnProfile = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error updating profile:", error);
+    console.error(error);
     res.status(500).json({ message: "Failed to update profile" });
   }
 };
+// ============================
+// UPDATE PASSWORD
+// ============================
+export const changePassword = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("+password");
 
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        message: "Current password and new password are required",
+      }); 
+    }
 
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    user.password = newPassword;
+
+    // Force logout all sessions
+    user.tokenVersion += 1;
+
+    await user.save();
+
+    res.json({
+      message: "Password updated successfully. Please login again.",
+      logout: true,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to change password" });
+  }
+};
+// ============================
+// UPDATE EMAIL
+// ============================
+export const changeEmail = async (req, res) => {
+  try {
+    const { email, currentPassword } = req.body;
+
+    // 🔥 Fetch FULL user including password
+    const user = await User.findById(req.user._id).select("+password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.password) {
+      return res.status(400).json({
+        message: "You don’t have a password set. Cannot change email.",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({
+        message: "Email is already taken",
+      });
+    }
+
+    user.email = email.toLowerCase();
+    user.tokenVersion += 1;
+
+    await user.save();
+
+    res.json({
+      message: "Email updated successfully. Please login again.",
+      logout: true,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to change email" });
+  }
+};
 // ============================
 // DELETE OWN PROFILE
 // ============================

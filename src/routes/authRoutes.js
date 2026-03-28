@@ -1,5 +1,12 @@
 import express from "express";
-import { registerUser, loginUser, updateOwnProfile, deleteOwnProfile } from "../controllers/authController.js";
+import {
+  registerUser,
+  loginUser,
+  updateBasicProfile,
+  deleteOwnProfile,
+  changePassword,
+  changeEmail,
+} from "../controllers/authController.js";
 import protect from "../middleware/authMiddleware.js";
 import { uploadImage } from "../middleware/uploadMiddleware.js";
 
@@ -17,7 +24,11 @@ router.get("/profile", protect, (req, res) => {
 
 
 // Update profile
-router.put("/me", protect, uploadImage.single("profilePicture"), updateOwnProfile);
+router.put("/me", protect, uploadImage.single("profilePicture"), updateBasicProfile);
+
+// Sensitive actions
+router.put("/me/change-password", protect, changePassword);
+router.put("/me/change-email", protect, changeEmail);
 
 // DELETE own account
 router.delete("/me", protect, deleteOwnProfile);
