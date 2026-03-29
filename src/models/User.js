@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       minlength: 6,
-      select: false, // 🔥 IMPORTANT: hide password by default
+      select: false, //  IMPORTANT: hide password by default
     },
 
     profilePicture: {
@@ -50,7 +50,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    // 🔥 ADD THIS (important for deleting from Cloudinary)
+    // ADD THIS (important for deleting from Cloudinary)
     profilePicturePublicId: {
       type: String,
       default: null,
@@ -68,7 +68,7 @@ const userSchema = new mongoose.Schema(
 );
 
 
-// 🔐 Hash password before saving
+//  Hash password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
 
@@ -79,7 +79,7 @@ userSchema.pre("save", async function (next) {
 });
 
 
-// 🔎 Compare password method
+//  Compare password method
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };

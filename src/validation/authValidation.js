@@ -38,17 +38,17 @@ export const registerSchema = Joi.object({
  profilePicture: Joi.any().optional(), 
 });
 export const updateProfileSchema = Joi.object({
-  firstName: Joi.string().trim().min(2).max(30).messages({
+  firstName: Joi.string().trim().min(2).max(30).pattern(nameRegex).messages({
       "string.base": "First name must be a text",
       "string.min": "First name must be at least 2 characters long",
       "string.max": "First name must not exceed 30 characters",
     }),
-  lastName: Joi.string().trim().min(2).max(30).optional().messages({
+  lastName: Joi.string().trim().min(2).max(30).pattern(nameRegex).optional().messages({
       "string.base": "Last name must be a text",
       "string.min": "Last name must be at least 2 characters long",
       "string.max": "Last name must not exceed 30 characters",
     }),
-   middleName: Joi.string().trim().min(2).max(30).optional().messages({
+   middleName: Joi.string().trim().min(2).max(30).pattern(nameRegex).optional().messages({
       "string.base": "Last name must be a text",
       "string.min": "Last name must be at least 2 characters long",
       "string.max": "Last name must not exceed 30 characters",
@@ -56,7 +56,7 @@ export const updateProfileSchema = Joi.object({
   email: Joi.string().email().optional().messages({
       "string.email": "Please provide a valid email address",
     }),
-  phoneNumber: Joi.string() .pattern(/^[0-9]{10,11}$/) .optional() .messages({
+  phoneNumber: Joi.string() .pattern(/^[0-9]{10,11}$/) .optional().pattern(numberRegex) .messages({
       "string.pattern.base": "Phone number must be 10 to 11 digits",
     }),
   currentPassword: Joi.string().optional(),
@@ -64,6 +64,7 @@ export const updateProfileSchema = Joi.object({
       "string.base": "Password must be a text",
       "string.min": "Password must be at least 6 characters long",
     }),
+    profilePicture: Joi.any().optional(), 
 })
 .or("firstName", "lastName", "email", "phoneNumber", "password")
 .messages({

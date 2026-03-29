@@ -11,7 +11,7 @@ import { registerSchema, updateProfileSchema } from "../validation/authValidatio
 // ============================
 export const registerUser = async (req, res) => {
   try {
-    // 1️⃣ Validate input
+    //  Validate input
     const { error } = registerSchema.validate(req.body, { abortEarly: false });
     if (error) {
       return res.status(400).json({
@@ -24,7 +24,7 @@ export const registerUser = async (req, res) => {
 
     email = email.toLowerCase();
 
-    // 2️⃣ Check duplicates
+    // Check duplicates
     const existingUser = await User.findOne({
       $or: [{ email }, { phoneNumber }],
     });
@@ -38,7 +38,7 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    // 3️⃣ Handle profile image
+    // Handle profile image
     let profilePictureUrl = null;
     let profilePicturePublicId = null;
 
@@ -60,7 +60,7 @@ export const registerUser = async (req, res) => {
       }
     }
 
-    // 4️⃣ Create user
+    //  Create user
     const newUser = await User.create({
       firstName,
       lastName,
@@ -139,13 +139,47 @@ export const updateBasicProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const {
-      firstName,
-      lastName,
-      middleName,
-      phoneNumber,
-    } = req.body;
+    const hasBodyData = Object.keys(req.body).length > 0;
+    const hasFile = !!req.file;
 
+    // Require at least one field or file
+    if (!hasBodyData && !hasFile) {
+      return res.status(400).json({
+        message: "At least one field or profile picture must be provided",
+      });
+    }
+
+    // Only validate body if it exists
+    if (hasBodyData) {
+      const { error } = updateProfileSchema.validate(req.body, {
+        abortEarly: false,
+      });
+
+      if (error) {
+        return res.status(400).json({
+          message: "Validation failed",
+          errors: error.details.map((err) => err.message),
+        });
+      }
+    }
+
+    const { firstName, lastName, middleName, phoneNumber } = req.body;
+
+    // Check if phone number is already taken
+    if (phoneNumber) {
+      const existingUser = await User.findOne({
+        phoneNumber,
+        _id: { $ne: user._id },
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          message: "Phone number is already registered",
+        });
+      }
+    }
+
+    // Update fields if provided
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (middleName) user.middleName = middleName;
@@ -158,6 +192,7 @@ export const updateBasicProfile = async (req, res) => {
         resource_type: "image",
       });
 
+      // Delete old profile picture if exists
       if (user.profilePicturePublicId) {
         await cloudinary.uploader.destroy(user.profilePicturePublicId);
       }
