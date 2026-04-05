@@ -9,32 +9,28 @@ import Chat from "../models/chatModel.js";
  */
 export const createOrGetConversation = async (req, res) => {
   try {
-    // Ensure user is authenticated
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({ message: "Unauthorized: User not found" });
+    if (!req.user?._id) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const senderId = req.user._id;
     const { receiverId } = req.body;
 
-    // Validate receiverId
     if (!receiverId || !mongoose.Types.ObjectId.isValid(receiverId)) {
       return res.status(400).json({ message: "Valid receiverId required" });
     }
 
-    // Find or create conversation atomically
-    let conversation = await Conversation.findOne({
-      participants: { $all: [senderId, receiverId] },
-      $expr: { $eq: [{ $size: "$participants" }, 2] }, // ensures only 2 members
-    }).populate("participants", "firstName lastName email");
+    // ALWAYS SORT 
+    const participants = [senderId, receiverId]
+      .map(id => id.toString())
+      .sort();
 
-
-    if (!conversation) {
-      conversation = await Conversation.create({
-        participants: [senderId, receiverId],
-      });
-      conversation = await conversation.populate("participants", "firstName lastName email");
-    }
+    // ATOMIC UPSERT (no duplicates EVER)
+    const conversation = await Conversation.findOneAndUpdate(
+      { participants },
+      { $setOnInsert: { participants } },
+      { new: true, upsert: true }
+    ).populate("participants", "firstName lastName email");
 
     res.status(200).json(conversation);
   } catch (err) {
@@ -54,76 +50,58 @@ export const getUserConversations = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized: User not found" });
     }
 
-    // Fetch individual conversations
-    let conversations = await Conversation.find({ participants: userId })
+    // 1. Fetch 1:1 conversations (optimized)
+    const conversations = await Conversation.find({ participants: userId })
       .populate("participants", "firstName lastName profilePicture")
+      .populate({
+        path: "latestMessage",
+        populate: {
+          path: "sender",
+          select: "firstName lastName profilePicture",
+        },
+      })
+      .sort({ updatedAt: -1 }) // 🔥 correct ordering
       .lean();
 
-    // Populate latestMessage dynamically for conversations without it
-    conversations = await Promise.all(
-      conversations.map(async (conv) => {
-        let latestMsg = null;
+    // Normalize 1:1 conversations
+    const formattedConversations = conversations.map((conv) => ({
+      ...conv,
+      isGroupChat: false,
+    }));
 
-        if (conv.latestMessage) {
-          latestMsg = await Message.findById(conv.latestMessage)
-            .populate("sender", "firstName lastName profilePicture")
-            .lean();
-        } else {
-          latestMsg = await Message.findOne({ conversationId: conv._id })
-            .sort({ createdAt: -1 })
-            .populate("sender", "firstName lastName  profilePicture")
-            .lean();
-        }
-
-        return {
-          ...conv,
-          latestMessage: latestMsg || null,
-          isGroupChat: false,
-        };
-      })
-    );
-
-    // Fetch group chats
-    let groupChats = await Chat.find({ users: userId })
+    // 2. Fetch group chats (optimized)
+    const groupChats = await Chat.find({ users: userId })
       .populate("users", "firstName lastName profilePicture")
       .populate("groupAdmin", "firstName lastName profilePicture")
+      .populate({
+        path: "latestMessage",
+        populate: {
+          path: "sender",
+          select: "firstName lastName profilePicture",
+        },
+      })
+      .sort({ updatedAt: -1 })
       .lean();
 
-    // Populate latestMessage for group chats
-    groupChats = await Promise.all(
-      groupChats.map(async (chat) => {
-        let latestMsg = null;
+    // Normalize group chats
+    const formattedGroupChats = groupChats.map((chat) => ({
+      _id: chat._id,
+      chatName: chat.chatName,
+      participants: chat.users,
+      latestMessage: chat.latestMessage || null,
+      isGroupChat: true,
+      groupAdmin: chat.groupAdmin,
+      updatedAt: chat.updatedAt,
+      createdAt: chat.createdAt,
+    }));
 
-        if (chat.latestMessage) {
-          latestMsg = await Message.findById(chat.latestMessage)
-            .populate("sender", "firstName lastName profilePicture")
-            .lean();
-        } else {
-          latestMsg = await Message.findOne({ chatId: chat._id })
-            .sort({ createdAt: -1 })
-            .populate("sender", "firstName lastName profilePicture")
-            .lean();
-        }
-
-        return {
-          _id: chat._id,
-          chatName: chat.chatName,
-          participants: chat.users,
-          latestMessage: latestMsg || null,
-          isGroupChat: true,
-          groupAdmin: chat.groupAdmin,
-          updatedAt: chat.updatedAt,
-          createdAt: chat.createdAt,
-        };
-      })
+    //  3. Merge + FINAL SORT (safety)
+    const allChats = [...formattedConversations, ...formattedGroupChats].sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() -
+        new Date(a.updatedAt).getTime()
     );
 
-    // Merge and sort all chats by updatedAt descending
-    const allChats = [...conversations, ...groupChats].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
-
-    // Return to frontend
     res.json({ chats: allChats });
   } catch (err) {
     console.error("Error fetching conversations:", err);

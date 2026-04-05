@@ -107,11 +107,8 @@ export default function chatSocket(io) {
         } = data;
 
         const roomId = conversationId || chatId;
-
         if (!roomId) {
-          return socket.emit("errorMessage", {
-            error: "Room ID required",
-          });
+          return socket.emit("errorMessage", { error: "Room ID required" });
         }
 
         if (!content?.trim() && attachments.length === 0) {
@@ -120,7 +117,7 @@ export default function chatSocket(io) {
           });
         }
 
-        // 🔥 Create message in DB
+        // 🔥 1. Create message in DB
         let newMessage = await Message.create({
           sender: userId,
           conversationId: conversationId || null,
@@ -130,15 +127,27 @@ export default function chatSocket(io) {
           attachments,
         });
 
-        await newMessage.populate(
-          "sender",
-          "_id firstName lastName email"
-        );
+        await newMessage.populate("sender", "_id firstName lastName email");
 
-        // 🔥 Emit to all users in room (including sender)
+        // 🔥 2. Update latestMessage in Conversation or Chat
+        if (conversationId) {
+          await Conversation.findByIdAndUpdate(
+            conversationId,
+            { latestMessage: newMessage._id },
+            { new: true }
+          );
+        } else if (chatId) {
+          await Chat.findByIdAndUpdate(
+            chatId,
+            { latestMessage: newMessage._id },
+            { new: true }
+          );
+        }
+
+        // 🔥 3. Emit to all users in the room (including sender)
         io.to(roomId).emit("receiveMessage", {
           ...newMessage.toObject(),
-          clientTempId, // used to replace optimistic message
+          clientTempId, // used to replace optimistic message on frontend
         });
 
         console.log(`💬 Message saved & emitted to room ${roomId}`);

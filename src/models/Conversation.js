@@ -20,4 +20,6 @@ const conversationSchema = new mongoose.Schema(
   { timestamps: true } // adds createdAt, updatedAt
 );
 
+conversationSchema.index({ participants: 1 }, { unique: true });
+
 export default mongoose.model("Conversation", conversationSchema);
