@@ -33,7 +33,7 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ message: "Not authorized, no token provided" });
     }
   } catch (error) {
-    console.error("JWT verification failed:", error.message);
+   console.error("JWT ERROR FULL:", error);
     return res.status(401).json({ message: "Not authorized, token failed" });
   }
 };

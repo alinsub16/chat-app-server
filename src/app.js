@@ -9,6 +9,7 @@ import searchRoutes from "./routes/searchRoutes.js";
 import conversationRoutes from "./routes/conversationRoutes.js";
 import onlineStatusRoutes from "./routes/onlineRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
+import userRoutes from "./routes/userRoutes.js"
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,7 @@ app.use("/api/search", searchRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/online-users", onlineStatusRoutes);
 app.use("/api/uploads", uploadRoutes);
+app.use("/api/users", userRoutes);
 
 
 //  Global error handler

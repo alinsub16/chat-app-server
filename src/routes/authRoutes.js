@@ -1,12 +1,5 @@
 import express from "express";
-import {
-  registerUser,
-  loginUser,
-  updateBasicProfile,
-  deleteOwnProfile,
-  changePassword,
-  changeEmail,
-} from "../controllers/authController.js";
+import { registerUser, loginUser, updateBasicProfile, deleteOwnProfile, changePassword, changeEmail} from "../controllers/authController.js";
 import protect from "../middleware/authMiddleware.js";
 import { uploadImage } from "../middleware/uploadMiddleware.js";
 
@@ -16,12 +9,10 @@ const router = express.Router();
 router.post("/register", uploadImage.single("profilePicture"), registerUser);
 router.post("/login", loginUser);
 
-
 // Show profile
 router.get("/profile", protect, (req, res) => {
   res.json({ message: "User profile data", user: req.user });
 });
-
 
 // Update profile
 router.put("/me", protect, uploadImage.single("profilePicture"), updateBasicProfile);

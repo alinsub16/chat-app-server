@@ -56,7 +56,7 @@ export default function chatSocket(io) {
       );
 
       console.log(
-        `✅ User ${userId} auto-joined ${
+        ` User ${userId} auto-joined ${
           conversations.length + groupChats.length
         } rooms`
       );
