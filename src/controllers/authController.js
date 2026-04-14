@@ -139,7 +139,7 @@ export const updateBasicProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const hasBodyData = Object.keys(req.body).length > 0;
+    const hasBodyData = req.body && Object.values(req.body).some(v => v !== undefined && v !== null);
     const hasFile = !!req.file;
 
     // Require at least one field or file
@@ -163,7 +163,7 @@ export const updateBasicProfile = async (req, res) => {
       }
     }
 
-    const { firstName, lastName, middleName, phoneNumber } = req.body;
+    const { firstName, lastName, middleName, phoneNumber, bio } = req.body;
 
     // Check if phone number is already taken
     if (phoneNumber) {
@@ -184,6 +184,7 @@ export const updateBasicProfile = async (req, res) => {
     if (lastName) user.lastName = lastName;
     if (middleName) user.middleName = middleName;
     if (phoneNumber) user.phoneNumber = phoneNumber;
+    if (bio !== undefined) user.bio = bio;
 
     // PROFILE IMAGE
     if (req.file) {
@@ -215,6 +216,7 @@ export const updateBasicProfile = async (req, res) => {
         email: user.email,
         phoneNumber: user.phoneNumber,
         profilePicture: user.profilePicture,
+        bio: user.bio,
       },
     });
   } catch (error) {

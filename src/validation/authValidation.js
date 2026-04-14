@@ -36,6 +36,7 @@ export const registerSchema = Joi.object({
     "any.required": "Password is required",
   }),
  profilePicture: Joi.any().optional(), 
+
 });
 export const updateProfileSchema = Joi.object({
   firstName: Joi.string().trim().min(2).max(30).pattern(nameRegex).messages({
@@ -64,7 +65,11 @@ export const updateProfileSchema = Joi.object({
       "string.base": "Password must be a text",
       "string.min": "Password must be at least 6 characters long",
     }),
-    profilePicture: Joi.any().optional(), 
+  profilePicture: Joi.any().optional(), 
+  bio: Joi.string().trim().max(100).optional().messages({
+  "string.max": "Bio must not exceed 100 characters",
+  "string.pattern.base": "Bio can only contain letters, spaces, hyphens, and apostrophes",
+  }),
 })
 .or("firstName", "lastName", "email", "phoneNumber", "password")
 .messages({

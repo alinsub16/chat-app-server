@@ -24,7 +24,8 @@ export const getUserProfile = async (req, res) => {
       middleName: user.middleName,
       profilePicture: user.profilePicture,
       email: user.email,
-      phoneNumber: user.phoneNumber
+      phoneNumber: user.phoneNumber,
+      bio: user.bio,
     };
 
     // Only include sensitive data if owner

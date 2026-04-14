@@ -1,4 +1,3 @@
-// src/app.js
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -17,9 +16,11 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(express.json()); // Parse JSON request bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173", //  Allow your frontend
+  origin: process.env.FRONTEND_URL || "http://localhost:5173", 
   methods: ["GET", "POST", "PUT", "DELETE"],        
   credentials: true, //  Allow cookies and headers like Authorization
 }));

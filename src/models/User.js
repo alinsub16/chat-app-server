@@ -42,15 +42,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       minlength: 6,
-      select: false, //  IMPORTANT: hide password by default
+      select: false,
     },
 
     profilePicture: {
       type: String,
       default: null,
     },
+    bio: {
+      type: String,
+      trim: true,
+    },
 
-    // ADD THIS (important for deleting from Cloudinary)
+ 
     profilePicturePublicId: {
       type: String,
       default: null,
