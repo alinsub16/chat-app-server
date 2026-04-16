@@ -8,6 +8,36 @@ const onlineUsers = new Map();
 export { onlineUsers };
 
 export default function chatSocket(io) {
+
+  // ===============================
+  // CLEANUP HELPER — defined at top level of chatSocket()
+  // so it's accessible everywhere inside
+  // ===============================
+  function removeSocketFromUser(userId, socketId, immediate) {
+    const userSockets = onlineUsers.get(userId) || [];
+    const updatedSockets = userSockets.filter((id) => id !== socketId);
+
+    if (updatedSockets.length > 0) {
+      onlineUsers.set(userId, updatedSockets);
+      return;
+    }
+
+    if (immediate) {
+      onlineUsers.delete(userId);
+      io.emit("userOffline", { userId });
+      console.log(` User offline (logout): ${userId}`);
+    } else {
+      setTimeout(() => {
+        const currentSockets = onlineUsers.get(userId);
+        if (!currentSockets || currentSockets.length === 0) {
+          onlineUsers.delete(userId);
+          io.emit("userOffline", { userId });
+          console.log(`User offline (disconnect): ${userId}`);
+        }
+      }, 3000);
+    }
+  }
+
   // ===============================
   // AUTH MIDDLEWARE
   // ===============================
@@ -42,27 +72,35 @@ export default function chatSocket(io) {
       const conversations = await Conversation.find({
         participants: userId,
       }).select("_id");
+      conversations.forEach((conv) => socket.join(conv._id.toString()));
 
-      conversations.forEach((conv) =>
-        socket.join(conv._id.toString())
-      );
-
-      const groupChats = await Chat.find({
-        users: userId,
-      }).select("_id");
-
-      groupChats.forEach((chat) =>
-        socket.join(chat._id.toString())
-      );
+      const groupChats = await Chat.find({ users: userId }).select("_id");
+      groupChats.forEach((chat) => socket.join(chat._id.toString()));
 
       console.log(
-        ` User ${userId} auto-joined ${
+        `User ${userId} auto-joined ${
           conversations.length + groupChats.length
         } rooms`
       );
     } catch (err) {
       console.error("Auto-join error:", err.message);
     }
+
+    // ===============================
+    // LOGOUT — immediate cleanup
+    // ===============================
+    socket.on("disconnect", () => {
+      console.log(`🚪 User logging out: ${userId}`);
+      removeSocketFromUser(userId, socket.id, true);
+    });
+
+    // ===============================
+    // DISCONNECT — grace period for refresh/network drop
+    // ===============================
+    socket.on("disconnect", () => {
+      console.log(`Client disconnected: ${socket.id} (User ID: ${userId})`);
+      removeSocketFromUser(userId, socket.id, false);
+    });
 
     // ===============================
     // JOIN / LEAVE CHAT
@@ -84,16 +122,15 @@ export default function chatSocket(io) {
     // ===============================
     socket.on("typing", ({ roomId, isTyping }) => {
       if (!roomId) return;
-
-      // Emit to all other users in the room
       socket.to(roomId).emit("typing", {
-        conversationId: roomId, // ⚠ must match frontend key
+        conversationId: roomId,
         userId,
         isTyping,
       });
     });
+
     // ===============================
-    // SEND MESSAGE (SOCKET OWNS SAVE)
+    // SEND MESSAGE
     // ===============================
     socket.on("sendMessage", async (data) => {
       try {
@@ -117,7 +154,6 @@ export default function chatSocket(io) {
           });
         }
 
-        // 🔥 1. Create message in DB
         let newMessage = await Message.create({
           sender: userId,
           conversationId: conversationId || null,
@@ -129,7 +165,6 @@ export default function chatSocket(io) {
 
         await newMessage.populate("sender", "_id firstName lastName email");
 
-        // 🔥 2. Update latestMessage in Conversation or Chat
         if (conversationId) {
           await Conversation.findByIdAndUpdate(
             conversationId,
@@ -144,18 +179,15 @@ export default function chatSocket(io) {
           );
         }
 
-        // 🔥 3. Emit to all users in the room (including sender)
         io.to(roomId).emit("receiveMessage", {
           ...newMessage.toObject(),
-          clientTempId, // used to replace optimistic message on frontend
+          clientTempId,
         });
 
-        console.log(`💬 Message saved & emitted to room ${roomId}`);
+        console.log(` Message saved & emitted to room ${roomId}`);
       } catch (err) {
         console.error("Socket sendMessage error:", err.message);
-        socket.emit("errorMessage", {
-          error: "Failed to send message",
-        });
+        socket.emit("errorMessage", { error: "Failed to send message" });
       }
     });
 
@@ -165,38 +197,31 @@ export default function chatSocket(io) {
     socket.on("updateMessage", async ({ messageId, content }) => {
       try {
         if (!mongoose.Types.ObjectId.isValid(messageId)) {
-          return socket.emit("errorMessage", {
-            error: "Invalid message ID",
-          }); 
+          return socket.emit("errorMessage", { error: "Invalid message ID" });
         }
 
         const message = await Message.findById(messageId);
         if (!message) {
-          return socket.emit("errorMessage", {
-            error: "Message not found",
-          });
+          return socket.emit("errorMessage", { error: "Message not found" });
         }
 
-        // Only sender can update
         if (message.sender.toString() !== userId.toString()) {
-          return socket.emit("errorMessage", {
-            error: "Unauthorized",
-          });
+          return socket.emit("errorMessage", { error: "Unauthorized" });
         }
 
         message.content = content;
         await message.save();
 
         const roomId =
-          message.chatId?.toString() ||
-          message.conversationId?.toString();
+          message.chatId?.toString() || message.conversationId?.toString();
 
-        const populatedMessage = await Message.findById(message._id)
-        .populate("sender", "firstName lastName profilePicture");
+        const populatedMessage = await Message.findById(message._id).populate(
+          "sender",
+          "firstName lastName profilePicture"
+        );
 
         io.to(roomId).emit("messageUpdated", populatedMessage);
-
-        console.log(` Message ${messageId} updated`);
+        console.log(`Message ${messageId} updated`);
       } catch (err) {
         console.error("Socket updateMessage error:", err.message);
       }
@@ -216,21 +241,21 @@ export default function chatSocket(io) {
           return socket.emit("errorMessage", { error: "Message not found" });
         }
 
-        // Only sender can delete
         if (message.sender.toString() !== userId.toString()) {
           return socket.emit("errorMessage", { error: "Unauthorized" });
-        } 
+        }
 
-        // Prefer client-provided roomId
-        const roomId = clientRoomId || message.chatId?.toString() || message.conversationId?.toString();
+        const roomId =
+          clientRoomId ||
+          message.chatId?.toString() ||
+          message.conversationId?.toString();
+
         if (!roomId) {
           return socket.emit("errorMessage", { error: "Room ID required" });
         }
 
         await Message.findByIdAndDelete(messageId);
-
         io.to(roomId).emit("messageDeleted", { messageId });
-
         console.log(`🗑 Message ${messageId} deleted`);
       } catch (err) {
         console.error("Socket deleteMessage error:", err.message);
@@ -238,75 +263,36 @@ export default function chatSocket(io) {
     });
 
     // ===============================
-    // React to Message
+    // REACT TO MESSAGE
     // ===============================
     socket.on("reactMessage", async ({ messageId, emoji }) => {
       try {
-
         const message = await Message.findById(messageId);
-
         if (!message) return;
 
         const existing = message.reactions.find(
-          (r) =>
-            r.user.toString() === userId &&
-            r.emoji === emoji
+          (r) => r.user.toString() === userId && r.emoji === emoji
         );
 
         if (existing) {
-          // remove reaction (toggle)
           message.reactions = message.reactions.filter(
-            (r) =>
-              !(
-                r.user.toString() === userId &&
-                r.emoji === emoji
-              )
+            (r) => !(r.user.toString() === userId && r.emoji === emoji)
           );
         } else {
-          message.reactions.push({
-            user: userId,
-            emoji
-          });
+          message.reactions.push({ user: userId, emoji });
         }
 
         await message.save();
 
         const roomId =
-          message.chatId?.toString() ||
-          message.conversationId?.toString();
+          message.chatId?.toString() || message.conversationId?.toString();
 
         io.to(roomId).emit("messageReactionUpdated", {
           messageId,
-          reactions: message.reactions
+          reactions: message.reactions,
         });
-
       } catch (err) {
         console.error("Reaction error:", err);
-      }
-    });
-
-    // ===============================
-    // DISCONNECT
-    // ===============================
-    socket.on("disconnect", () => {
-      console.log(`Client disconnected: ${socket.id}`);
-
-      const userSockets = onlineUsers.get(userId) || [];
-      const updatedSockets = userSockets.filter(
-        (id) => id !== socket.id
-      );
-
-      if (updatedSockets.length > 0) {
-        onlineUsers.set(userId, updatedSockets);
-      } else {
-        setTimeout(() => {
-          const currentSockets = onlineUsers.get(userId);
-          if (!currentSockets || currentSockets.length === 0) {
-            onlineUsers.delete(userId);
-            io.emit("userOffline", { userId });
-            console.log(`User offline: ${userId}`);
-          }
-        }, 3000);
       }
     });
   });

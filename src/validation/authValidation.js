@@ -57,7 +57,7 @@ export const updateProfileSchema = Joi.object({
   email: Joi.string().email().optional().messages({
       "string.email": "Please provide a valid email address",
     }),
-  phoneNumber: Joi.string() .pattern(/^[0-9]{10,11}$/) .optional().pattern(numberRegex) .messages({
+  phoneNumber: Joi.string().optional().pattern(numberRegex) .messages({
       "string.pattern.base": "Phone number must be 10 to 11 digits",
     }),
   currentPassword: Joi.string().optional(),
@@ -71,7 +71,7 @@ export const updateProfileSchema = Joi.object({
   "string.pattern.base": "Bio can only contain letters, spaces, hyphens, and apostrophes",
   }),
 })
-.or("firstName", "lastName", "email", "phoneNumber", "password")
+.or("firstName", "lastName", "email", "phoneNumber", "password", "profilePicture", "bio")
 .messages({
   "object.missing": "At least one field must be provided to update your profile",
 });
