@@ -163,7 +163,7 @@ export default function chatSocket(io) {
           attachments,
         });
 
-        await newMessage.populate("sender", "_id firstName lastName email");
+        await newMessage.populate("sender", "_id firstName lastName email profilePicture");
 
         if (conversationId) {
           await Conversation.findByIdAndUpdate(

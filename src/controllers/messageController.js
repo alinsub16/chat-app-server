@@ -175,7 +175,7 @@ export const getMessages = async (req, res) => {
         { chatId: new mongoose.Types.ObjectId(chatId) }          // For group chat
       ]
     })
-      .populate("sender", "firstName lastName email")
+      .populate("sender", "firstName lastName email profilePicture")
       .sort({ createdAt: 1 });
 
     console.log("Messages fetched:", messages.length);
