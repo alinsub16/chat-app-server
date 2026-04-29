@@ -163,7 +163,6 @@ export const sendMessage = async (req, res) => {
 export const getMessages = async (req, res) => {
   try {
     const { chatId } = req.params;
-    console.log("Incoming chatId:", chatId);
 
   if (!mongoose.Types.ObjectId.isValid(chatId)) {
         return res.status(400).json({ message: "Invalid chatId" });
@@ -177,8 +176,6 @@ export const getMessages = async (req, res) => {
     })
       .populate("sender", "firstName lastName email profilePicture")
       .sort({ createdAt: 1 });
-
-    console.log("Messages fetched:", messages.length);
     res.json(messages);
   } catch (error) {
     console.error("Failed to fetch messages:", error);
@@ -191,9 +188,6 @@ export const updateMessage = async (req, res) => {
     const { messageId } = req.params;
     const { content } = req.body;
     const userId = req.user._id;
-
-    console.log("Message ID to update:", messageId);
-    console.log("User ID:", userId);
 
     // Validate message ID format
     if (!mongoose.Types.ObjectId.isValid(messageId)) {

@@ -49,10 +49,6 @@ export const socketAuth = async (socket, next) => {
       email: user.email,
     };
 
-    // Debugging logs (remove in production)
-    console.log("Socket authenticated:", socket.user);
-    console.log("socketAuth running...");
-
     // Allow connection to proceed
     next();
   } catch (error) {
