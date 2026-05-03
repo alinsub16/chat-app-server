@@ -37,7 +37,7 @@ io.use((socket, next) => {
     const token = socket.handshake.auth.token; // token sent from frontend
 
     if (!token) {
-      console.log(" No token provided");
+      // console.log(" No token provided");
       return next(new Error("Authentication error: No token provided"));
     }
 
@@ -45,14 +45,14 @@ io.use((socket, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     if (!decoded || !decoded.id) {
-      console.log("Socket connection rejected: Token missing user ID");
+      // console.log("Socket connection rejected: Token missing user ID");
       return next(new Error("Authentication error: Invalid token payload"));
     }
 
     // Attach decoded user data to the socket
     socket.user = decoded;
 
-    console.log(` User authenticated: ${decoded.id}`);
+    // console.log(` User authenticated: ${decoded.id}`);
     next();
   } catch (error) {
     console.error("Socket auth error:", error.message);

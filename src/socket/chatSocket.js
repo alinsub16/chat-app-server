@@ -25,14 +25,14 @@ export default function chatSocket(io) {
     if (immediate) {
       onlineUsers.delete(userId);
       io.emit("userOffline", { userId });
-      console.log(` User offline (logout): ${userId}`);
+      // console.log(` User offline (logout): ${userId}`);
     } else {
       setTimeout(() => {
         const currentSockets = onlineUsers.get(userId);
         if (!currentSockets || currentSockets.length === 0) {
           onlineUsers.delete(userId);
           io.emit("userOffline", { userId });
-          console.log(`User offline (disconnect): ${userId}`);
+          // console.log(`User offline (disconnect): ${userId}`);
         }
       }, 3000);
     }
@@ -52,7 +52,7 @@ export default function chatSocket(io) {
 
   io.on("connection", async (socket) => {
     const userId = socket.user?.id;
-    console.log(`⚡ User connected: ${socket.id} (User ID: ${userId})`);
+    // console.log(` User connected: ${socket.id} (User ID: ${userId})`);
 
     if (!userId) return;
 
@@ -77,11 +77,11 @@ export default function chatSocket(io) {
       const groupChats = await Chat.find({ users: userId }).select("_id");
       groupChats.forEach((chat) => socket.join(chat._id.toString()));
 
-      console.log(
-        `User ${userId} auto-joined ${
-          conversations.length + groupChats.length
-        } rooms`
-      );
+      // console.log(
+      //   `User ${userId} auto-joined ${
+      //     conversations.length + groupChats.length
+      //   } rooms`
+      // );
     } catch (err) {
       console.error("Auto-join error:", err.message);
     }
@@ -90,7 +90,7 @@ export default function chatSocket(io) {
     // LOGOUT — immediate cleanup
     // ===============================
     socket.on("disconnect", () => {
-      console.log(`🚪 User logging out: ${userId}`);
+      // console.log(`🚪 User logging out: ${userId}`);
       removeSocketFromUser(userId, socket.id, true);
     });
 
@@ -98,7 +98,7 @@ export default function chatSocket(io) {
     // DISCONNECT — grace period for refresh/network drop
     // ===============================
     socket.on("disconnect", () => {
-      console.log(`Client disconnected: ${socket.id} (User ID: ${userId})`);
+      // console.log(`Client disconnected: ${socket.id} (User ID: ${userId})`);
       removeSocketFromUser(userId, socket.id, false);
     });
 
@@ -108,13 +108,13 @@ export default function chatSocket(io) {
     socket.on("joinChat", (roomId) => {
       if (!roomId) return;
       socket.join(roomId);
-      console.log(`User ${userId} joined room: ${roomId}`);
+      // console.log(`User ${userId} joined room: ${roomId}`);
     });
 
     socket.on("leaveChat", (roomId) => {
       if (!roomId) return;
       socket.leave(roomId);
-      console.log(`🚪 User ${userId} left room: ${roomId}`);
+      // console.log(`🚪 User ${userId} left room: ${roomId}`);
     });
 
     // ===============================
@@ -184,7 +184,7 @@ export default function chatSocket(io) {
           clientTempId,
         });
 
-        console.log(` Message saved & emitted to room ${roomId}`);
+        // console.log(` Message saved & emitted to room ${roomId}`);
       } catch (err) {
         console.error("Socket sendMessage error:", err.message);
         socket.emit("errorMessage", { error: "Failed to send message" });
@@ -221,7 +221,7 @@ export default function chatSocket(io) {
         );
 
         io.to(roomId).emit("messageUpdated", populatedMessage);
-        console.log(`Message ${messageId} updated`);
+        // console.log(`Message ${messageId} updated`);
       } catch (err) {
         console.error("Socket updateMessage error:", err.message);
       }
@@ -256,7 +256,7 @@ export default function chatSocket(io) {
 
         await Message.findByIdAndDelete(messageId);
         io.to(roomId).emit("messageDeleted", { messageId });
-        console.log(`🗑 Message ${messageId} deleted`);
+        // console.log(`🗑 Message ${messageId} deleted`);
       } catch (err) {
         console.error("Socket deleteMessage error:", err.message);
       }
